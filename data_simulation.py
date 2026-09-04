@@ -1,30 +1,18 @@
-"""
-╔══════════════════════════════════════════════════════════════════════════════╗
-║         B2B MRO SUPPLY CHAIN — SYNTHETIC DATASET SIMULATION                ║
-║                                                                              ║
-║  Author : Marziyeh Eslamparasti                                              ║
-║  Purpose: Generate a realistic B2B MRO dataset for portfolio analysis        ║
-║                                                                              ║
-║  WHY SYNTHETIC DATA?                                                         ║
-║  Real operational data from B2B businesses is confidential and cannot        ║
-║  be shared publicly. Synthetic data — generated from real business           ║
-║  logic and industry benchmarks — is the standard approach in data            ║
-║  science portfolios and academic research. This exact approach was           ║
-║  used in the author's Master's thesis (University of Europe, Hamburg).       ║
-║                                                                              ║
-║  HOW IT WORKS:                                                               ║
-║  1. Define real business rules as parameters (city weights, skill            ║
-║     levels, supplier reliability scores)                                     ║
-║  2. Use those rules to CONSTRAIN the random generation — so the data         ║
-║     follows real patterns, not pure randomness                               ║
-║  3. Generate 5 interconnected tables that mirror a real database             ║
-╚══════════════════════════════════════════════════════════════════════════════╝
+"""Generate the reproducible synthetic dataset used by this portfolio project.
+
+The scenario represents a fictional German B2B MRO distributor. Its parameters
+are illustrative assumptions informed by domain experience; they are not
+empirical industry benchmarks. The generated data is suitable for demonstrating
+analysis workflows, not for estimating real market performance.
 """
 
-import pandas as pd
-import numpy as np
 from datetime import datetime, timedelta
+from pathlib import Path
 import warnings
+
+import numpy as np
+import pandas as pd
+
 warnings.filterwarnings('ignore')
 
 # Fix random seed so results are reproducible
@@ -33,72 +21,58 @@ np.random.seed(42)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # SECTION 1 — BUSINESS PARAMETERS
-# These are the "rules of the business" translated into numbers.
-# Each parameter was chosen to reflect real industry patterns.
+# These are explicit assumptions for the fictional business scenario.
+# Results downstream should be interpreted in light of these choices.
 # ══════════════════════════════════════════════════════════════════════════════
 
 # ── 1A: CITY PROFILES ─────────────────────────────────────────────────────────
-# weight       = share of total customers in that city
-#                (Hamburg = 20% because it is the largest industrial hub)
-# delivery_days= how many days a standard order takes to arrive
-#                (Hamburg = 1 day because it is close to main suppliers)
-#                (Dresden/Nuremberg = 3 days because they are more remote)
-# income       = general income level — affects order size
-# heavy_pct    = probability that a customer in this city works in heavy industry
-#                (Stuttgart = 45% because of the automotive/manufacturing sector)
+# weight        = simulated share of customers in the city
+# delivery_days = simulated base promise used for order timing
+# heavy_pct     = simulated probability of a heavy-industry customer
 
 cities = {
-    'Hamburg':   {'weight':0.20, 'delivery_days':1, 'income':'high',   'heavy_pct':0.40},
-    'Berlin':    {'weight':0.18, 'delivery_days':1, 'income':'high',   'heavy_pct':0.30},
-    'Munich':    {'weight':0.16, 'delivery_days':1, 'income':'high',   'heavy_pct':0.35},
-    'Stuttgart': {'weight':0.12, 'delivery_days':2, 'income':'high',   'heavy_pct':0.45},
-    'Frankfurt': {'weight':0.12, 'delivery_days':1, 'income':'high',   'heavy_pct':0.28},
-    'Cologne':   {'weight':0.10, 'delivery_days':2, 'income':'medium', 'heavy_pct':0.32},
-    'Dresden':   {'weight':0.07, 'delivery_days':3, 'income':'medium', 'heavy_pct':0.38},
-    'Nuremberg': {'weight':0.05, 'delivery_days':3, 'income':'medium', 'heavy_pct':0.42},
+    'Hamburg':   {'weight':0.20, 'delivery_days':1, 'heavy_pct':0.40},
+    'Berlin':    {'weight':0.18, 'delivery_days':1, 'heavy_pct':0.30},
+    'Munich':    {'weight':0.16, 'delivery_days':1, 'heavy_pct':0.35},
+    'Stuttgart': {'weight':0.12, 'delivery_days':2, 'heavy_pct':0.45},
+    'Frankfurt': {'weight':0.12, 'delivery_days':1, 'heavy_pct':0.28},
+    'Cologne':   {'weight':0.10, 'delivery_days':2, 'heavy_pct':0.32},
+    'Dresden':   {'weight':0.07, 'delivery_days':3, 'heavy_pct':0.38},
+    'Nuremberg': {'weight':0.05, 'delivery_days':3, 'heavy_pct':0.42},
 }
 # NOTE: weights must sum to 1.0 — they represent the probability distribution
 
 # ── 1B: TECHNICIAN LEVELS ─────────────────────────────────────────────────────
-# basket_size     = average number of items per order
-#                   (Master Mechanic = 5.3 because they buy full maintenance kits)
-# avg_order_value = average total value of an order in euros
-#                   (Junior = €210, Maintenance Engineer = €960)
-# These values reflect real MRO industry benchmarks
+# basket_size = assumed average number of items per order
+# These are illustrative portfolio assumptions, not industry benchmarks.
 
 tech_levels = {
-    'Junior Technician':    {'weight':0.30, 'basket_size':1.9, 'avg_order_value':210},
-    'Senior Technician':    {'weight':0.45, 'basket_size':3.4, 'avg_order_value':480},
-    'Maintenance Engineer': {'weight':0.25, 'basket_size':5.3, 'avg_order_value':960},
+    'Junior Technician':    {'weight':0.30, 'basket_size':1.9},
+    'Senior Technician':    {'weight':0.45, 'basket_size':3.4},
+    'Maintenance Engineer': {'weight':0.25, 'basket_size':5.3},
 }
 
 # ── 1C: WORK SITUATIONS ───────────────────────────────────────────────────────
-# order_value_mult = multiplier applied to order value
-#                    (Facility Manager = 1.45x because they buy for whole facilities)
-#                    (Freelance = 0.80x because they buy for one job at a time)
-# retention        = probability of re-ordering (loyalty score)
-#                    (Facility Manager = 88% retention — they have a long-term need)
+# order_value_mult = scenario multiplier applied to basket size
 
 work_situations = {
-    'Freelance':        {'weight':0.30, 'order_value_mult':0.80, 'retention':0.62},
-    'Company Employee': {'weight':0.35, 'order_value_mult':0.95, 'retention':0.72},
-    'Facility Manager': {'weight':0.35, 'order_value_mult':1.45, 'retention':0.88},
+    'Freelance':        {'weight':0.30, 'order_value_mult':0.80},
+    'Company Employee': {'weight':0.35, 'order_value_mult':0.95},
+    'Facility Manager': {'weight':0.35, 'order_value_mult':1.45},
 }
 
 # ── 1D: INDUSTRY TYPES ────────────────────────────────────────────────────────
-# part_price_mult = Heavy Industry parts cost more than Light Industry
-#                   (hydraulic seals for a steel plant vs a bakery)
+# part_price_mult = scenario multiplier applied to generated order value
 
 industry_types = {
-    'Light Industry': {'weight':0.60, 'part_price_mult':0.80},
-    'Heavy Industry': {'weight':0.40, 'part_price_mult':1.30},
+    'Light Industry': {'part_price_mult':0.80},
+    'Heavy Industry': {'part_price_mult':1.30},
 }
 
 # ── 1E: PRODUCT CATEGORIES ────────────────────────────────────────────────────
-# margin       = gross profit margin (Fasteners = 42% because they are commodity)
+# margin       = assumed product gross margin stored in the product master
 # avg_price    = base unit price in euros
 # level_req    = minimum technician level needed to buy this product
-#                (Hydraulic Parts require Maintenance Engineer — complex installation)
 # industry_specific = True means the product only fits certain industry types
 
 categories = {
@@ -115,11 +89,9 @@ categories = {
 }
 
 # ── 1F: SUPPLIER COUNTRIES ────────────────────────────────────────────────────
-# reliability = probability of delivering on time
-#               (Germany = 94% — local, reliable logistics)
-#               (China = 71% — long transit, customs delays)
+# reliability = assumed supplier service score in this fictional scenario
 # lead_days   = standard days from order to delivery
-#               (Germany = 2 days, China = 18 days)
+# Country-level values are modelling inputs, not claims about real suppliers.
 
 supplier_countries = {
     'Germany':     {'weight':0.40, 'reliability':0.94, 'lead_days':2},
@@ -131,7 +103,7 @@ supplier_countries = {
 
 # ══════════════════════════════════════════════════════════════════════════════
 # SECTION 2 — GENERATE CUSTOMERS TABLE
-# 500 customers with realistic attributes based on the parameters above
+# 500 customers generated from the scenario parameters above
 # ══════════════════════════════════════════════════════════════════════════════
 
 N_CUSTOMERS = 500
@@ -158,9 +130,8 @@ for i in range(N_CUSTOMERS):
     work  = np.random.choice(work_names,  p=work_w)
 
     # Step 2: Determine industry type
-    # Base probability comes from city's heavy_pct
-    # Adjusted upward for higher skill levels and Facility Managers
-    # because they are more likely to work in industrial settings
+    # Base probability comes from the city's scenario parameter.
+    # The scenario increases it for higher skill levels and Facility Managers.
     heavy_prob = cities[city]['heavy_pct']
     if level == 'Maintenance Engineer': heavy_prob += 0.10
     if work  == 'Facility Manager':     heavy_prob += 0.08
@@ -234,9 +205,7 @@ for i in range(N_SUPPLIERS):
     country = np.random.choice(sup_countries, p=sup_w)
     meta    = supplier_countries[country]
 
-    # Reliability varies slightly around the country average
-    # German suppliers: avg 0.94 ± 0.07
-    # Chinese suppliers: avg 0.71 ± 0.07
+    # Reliability varies around the scenario value assigned above.
     reliability = round(
         min(1.0, max(0.5, np.random.normal(meta['reliability'], 0.07))), 2)
 
@@ -253,11 +222,18 @@ print(f"✅ Suppliers generated: {len(suppliers_df):,}")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # SECTION 5 — GENERATE CUSTOMER ORDERS TABLE
-# 20,000 orders — each one goes through a multi-step realistic process
+# 20,000 customer orders generated through the documented scenario process
 # ══════════════════════════════════════════════════════════════════════════════
 
 N_ORDERS = 20000
 orders   = []
+return_reasons = [
+    'Wrong item ordered',
+    'Defective product',
+    'Compatibility issue',
+    'Over-ordered',
+    'No reason given',
+]
 
 for i in range(N_ORDERS):
 
@@ -309,6 +285,19 @@ for i in range(N_ORDERS):
     delay         = max(0, int(np.random.exponential(1.2)))
     actual_days   = promised_days + delay
 
+    # Preserve two independent random draws in the seeded simulation while
+    # ensuring that the return flag and reason cannot contradict each other.
+    return_draw = np.random.random()
+    reason_draw = np.random.random()
+    sampled_reason = (
+        np.random.choice(return_reasons) if reason_draw < 0.055 else None
+    )
+    is_returned = int(return_draw < 0.055)
+    if is_returned:
+        return_reason = sampled_reason or return_reasons[i % len(return_reasons)]
+    else:
+        return_reason = 'Not returned'
+
     orders.append({
         'order_id':         f'ORD-{str(i+1).zfill(6)}',
         'customer_id':      cust['customer_id'],
@@ -328,12 +317,9 @@ for i in range(N_ORDERS):
         'delay_days':       delay,
         'on_time':          1 if delay == 0 else 0,       # 1 = on time, 0 = late
         'on_time_label':    'On Time' if delay == 0 else 'Late',
-        # Return rate: 5.5% probability — realistic for B2B MRO
-        'is_returned':      1 if np.random.random() < 0.055 else 0,
-        'return_reason':    np.random.choice([
-            'Wrong item ordered', 'Defective product',
-            'Compatibility issue', 'Over-ordered', 'No reason given'
-        ]) if np.random.random() < 0.055 else 'Not returned',
+        # Return rate is an explicit 5.5% scenario assumption.
+        'is_returned':      is_returned,
+        'return_reason':    return_reason,
     })
 
 orders_df = pd.DataFrame(orders)
@@ -396,14 +382,14 @@ print(f"   Supplier on-time rate: {sup_orders_df['on_time'].mean()*100:.1f}%")
 # SECTION 7 — SAVE ALL FILES
 # ══════════════════════════════════════════════════════════════════════════════
 
-import os
-output_dir = os.path.dirname(os.path.abspath(__file__))
+output_dir = Path(__file__).resolve().parent / 'data'
+output_dir.mkdir(parents=True, exist_ok=True)
 
-customers_df.to_csv(f'{output_dir}/customers.csv',      index=False)
-products_df.to_csv(f'{output_dir}/products.csv',        index=False)
-suppliers_df.to_csv(f'{output_dir}/suppliers.csv',      index=False)
-orders_df.to_csv(f'{output_dir}/customer_orders.csv',   index=False)
-sup_orders_df.to_csv(f'{output_dir}/supplier_orders.csv', index=False)
+customers_df.to_csv(output_dir / 'customers.csv', index=False)
+products_df.to_csv(output_dir / 'products.csv', index=False)
+suppliers_df.to_csv(output_dir / 'suppliers.csv', index=False)
+orders_df.to_csv(output_dir / 'customer_orders.csv', index=False)
+sup_orders_df.to_csv(output_dir / 'supplier_orders.csv', index=False)
 
 print(f"\n✅ All 5 CSV files saved to: {output_dir}")
 print(f"\n{'='*55}")
@@ -424,14 +410,14 @@ print("""
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 HOW TO EXPLAIN THIS IN AN INTERVIEW:
 
-"This dataset was generated using a business simulation
-script. I defined the real parameters of a B2B MRO
-business — city distributions, technician skill levels,
-supplier reliability by country, and industry types —
-and used Python to generate 20,000 realistic orders that
-follow those rules. This is called synthetic data and is
-standard practice in data science when real operational
-data is confidential. The approach mirrors what I used in
-my Master's thesis at the University of Europe, Hamburg."
+"This dataset was generated with a reproducible business
+simulation. I defined transparent assumptions for a
+fictional B2B MRO distributor — customer profiles,
+purchasing behaviour, delivery timing, and supplier
+service levels — and used Python to generate five linked
+tables. The purpose is to demonstrate an end-to-end
+analytics workflow without exposing confidential data.
+The results describe the simulated scenario and should
+not be presented as real market evidence."
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 """)
